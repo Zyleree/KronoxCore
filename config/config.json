@@ -1,0 +1,29 @@
+{
+  "ddosProtectionSystem": "rateLimit",
+  "ddosProtectionServerPort": 8000,
+  "ddosProtectionServerIp": "localhost",
+  "requestRateLimit": 1000,
+  "requestRatePeriodMs": 10000,
+  "maxAvailablePorts": 1000,
+  "initialAvailablePorts": [8001, 8002, 8003, 8004, 8005],
+  "discordWebhook": "https://discord.com/api/webhooks/...",
+  "whitelistedIps": {
+    "192.168.1.100": true,
+    "192.168.1.101": true
+  },
+  "blacklistThreshold": 100,
+  "blacklistDurationMs": 3600000,
+  "captchaEnabled": true,
+  "captchaDifficulty": "medium",
+  "headersToAnalyze": [
+    "User-Agent",
+    "Referer"
+  ],
+  "logFilePath": "logs/server.log",
+  "logLevel": "INFO",
+  "maxConcurrentConnections": 1000,
+  "requestQueueSize": 500,
+  "cloudFlareApiKey": "your_api_key",
+  "cloudFlareEmail": "your_email@example.com"
+}
+
