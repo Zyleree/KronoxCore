@@ -1,6 +1,4 @@
-# DDoS Protection Server
-
-This is a Java-based server application that provides DDoS (Distributed Denial of Service) protection for your main servers. It acts as a proxy server, redirecting incoming traffic to the appropriate main server while implementing various DDoS mitigation techniques to prevent malicious attacks.
+# KronoxCore
 
 ## Features
 
