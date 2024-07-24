@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Checking your browser...</title>
+</head>
+<body>
+  <p>Please wait a moment while we verify your request.</p>
+
+  <form id="challengeForm" action="/" method="POST">
+    <input type="hidden" name="challengeToken" value="{{.Token}}">
+  </form>
+
+  <script>
+     setTimeout(function() {
+         document.getElementById('challengeForm').submit();
+     }, 2000); 
+  </script>
+</body>
+</html>
