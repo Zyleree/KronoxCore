@@ -31,7 +31,7 @@ type Config struct {
 	LogFile            string                 `json:"logFile"`
 	ChallengePagePath string                 `json:"challengePagePath"`
 	RateLimit        ddos.RateLimitConfig   `json:"rateLimit"`
-	ProtectionMode   string                 `json:"protectionMode"` // Global protection mode: "web" or "none"
+	ProtectionMode   string                 `json:"protectionMode"` 
 	GlobalBlacklist  []string               `json:"globalBlacklist"`
 	Routing           []routing.Route        `json:"routing"`
 	BackendServers    []routing.BackendServer `json:"backendServers"`
@@ -51,11 +51,11 @@ func loadConfig(filePath string) (*Config, error) {
 }
 
 func saveConfig(filePath string, config *Config) error {
-	data, err := json.MarshalIndent(config, "", "    ") // Indent for readability
+	data, err := json.MarshalIndent(config, "", "    ") 
 	if err != nil {
 		return fmt.Errorf("error marshalling config: %w", err)
 	}
-	return ioutil.WriteFile(filePath, data, 0644) // Use appropriate permissions
+	return ioutil.WriteFile(filePath, data, 0644)
 }
 
 func main() {
@@ -135,12 +135,12 @@ func handleRequest(ddosProtection *ddos.DDOSProtection, challengeSystem *challen
 			},
 		}
 		logging.LogEventCustom(requestLog)
-		protectionMode := cfg.ProtectionMode 
+		protectionMode := cfg.ProtectionMode
 
 		route, routeExists := routing.GetRouteByHostAndPort(r.Host, r.Port)
 		if routeExists {
 			if route.ProtectionMode != "" {
-				protectionMode = route.ProtectionMode // Override with route-specific
+				protectionMode = route.ProtectionMode 
 			}
 
 			if isBlacklisted(r.RemoteAddr, route.Blacklist) {
@@ -155,6 +155,7 @@ func handleRequest(ddosProtection *ddos.DDOSProtection, challengeSystem *challen
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
+
 		if protectionMode == "web" {
 			if ddosProtection.IsSuspicious(r) {
 				logging.LogEvent("WARNING", r, fmt.Sprintf("Suspicious request detected from: %s", r.RemoteAddr))
@@ -303,7 +304,7 @@ func processCommand(command string, config *Config) {
 		}
 
 		if err := saveConfig("config.json", config); err != nil {
-			fmt.Println("Error saving config:", err) // Handle error, maybe revert change and inform the user
+			fmt.Println("Error saving config:", err) 
 		}
 
 	case "addblacklist":
@@ -377,7 +378,6 @@ func processCommand(command string, config *Config) {
 			fmt.Println("Error saving config:", err)
 		}
 	case "routestats":
-
 		if len(parts) == 2 { 
 			routeID, err := strconv.Atoi(parts[1])
 			if err != nil {
@@ -386,10 +386,11 @@ func processCommand(command string, config *Config) {
 			routeStats, err := routing.GetRouteStats(routeID, config)
 			if err != nil {
 				fmt.Println("Error: ", err) 
+				return
 			}
 			fmt.Printf("------------ Route Stats for ID: %d ------------\n", routeID)
 			fmt.Printf("Total Requests: %d\n", routeStats.TotalRequests)
-		} else { 
+		} else {
 			globalStats := routing.GetGlobalStats(config)
 			fmt.Println("------------ Global Stats ------------")
 			fmt.Printf("Total Requests (Global): %d\n", globalStats.TotalRequests)
@@ -402,7 +403,7 @@ func processCommand(command string, config *Config) {
 func removeFromSlice(slice []string, item string) []string {
 	for i, v := range slice {
 		if v == item {
-			return append(slice[:i], slice[i+1:]...) // Efficiently remove element
+			return append(slice[:i], slice[i+1:]...)
 		}
 	}
 	return slice

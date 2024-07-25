@@ -1,19 +1,68 @@
 <!DOCTYPE html> 
 <html>
 <head> 
-  <title>Checking Your Browser...</title> 
-</head> 
-<body> 
-  <p>Please wait while we check your request...</p> 
+    <title>Verification</title>
+    <style>
+        body {
+            background-color: #f4f4f4;
+            font-family: Arial, sans-serif; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0; 
+        }
 
-  <form id="challengeForm" action="/" method="POST">  
-    <input type="hidden" name="challengeToken" value="{{.Token}}">  
-  </form> 
+        .container {
+            background-color: white; 
+            padding: 30px;
+            border-radius: 5px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.3);  
+            text-align: center;  
+        }  
 
-  <script> 
-    setTimeout(function() {  
-      document.getElementById('challengeForm').submit();  
-    }, 2000); 
-  </script> 
-</body>  
-</html>
+        h2 {
+            color: #333; 
+        }
+
+        input[type="text"] {
+            padding: 10px; 
+            margin: 10px 0; 
+            width: calc(100% - 22px);
+            border: 1px solid #ddd; 
+            border-radius: 4px;  
+        }  
+
+        input[type="submit"] { 
+            background-color: #5cb85c; 
+            color: white;  
+            padding: 12px 20px;  
+            border: none; 
+            cursor: pointer;  
+            border-radius: 4px;
+        } 
+
+        input[type="submit"]:hover { 
+            background-color: #4cae4c;
+        }
+
+		input::placeholder {
+		color: #bbb;
+		}
+    </style>
+</head>
+<body>  
+    <div class="container">  
+        <h2>Verifying Your Browser</h2> 
+        <p>Please enter the code below to continue:</p>
+
+        <form method="POST">
+			<label for="challengeToken" style="display:none;">Verification Code:</label>
+            <input type="text" id="challengeToken" name="challengeToken"  style="display:none;" value="{{.Token}}"> <br />
+        </form>
+		<script> 
+		   document.forms[0].submit(); // Automatically submit the form (JavaScript)
+		</script>
+	</div> 
+</body> 
+</html> 
