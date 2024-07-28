@@ -1,8 +1,0 @@
-{
-    "serverPort": 8080, 
-    "logFile": "logs/fortify.log", 
-    "challengePagePath": "challenge/challenge.html", 
-    "rateLimit": {
-      "requestsPerSecond": 5 
-    }
-  } 
