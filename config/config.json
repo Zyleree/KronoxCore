@@ -1,0 +1,6 @@
+{
+    "availablePorts": [8000, 8001, 8002, 8003, 8004],
+    "ddosProtectionEnabled": true,
+    "ddosTimeoutMinutes": 30,
+    "corsAllowedOrigins": [ "https://allowed-origin.com", "%" ]
+  }
