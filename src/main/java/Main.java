@@ -1,75 +1,70 @@
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.*;
-import java.security.NoSuchAlgorithmException;
-import javax.crypto.*;
-import javax.crypto.spec.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.concurrent.TimeUnit;
+import javax.crypto.*;
+import javax.crypto.spec.*;
 
 public class Main {
     private static final Logger LOGGER = Logger.getLogger(Main.class.getName());
     public static final String CONFIG_DIR = "config"; 
-    public static final String LOGS_DIR = "logs";  
+    public static final String LOGS_DIR = "logs";
 
     public static void main(String[] args) {
-        setupDirectories(); 
-        setupLogger(); 
+        setupDirectories();
+        setupLogger();
         LOGGER.info("Starting the KronoxCore v1");
 
         ConfigManager configManager = new ConfigManager();
         LinkManager linkManager = new LinkManager(configManager);
         CommandHandler commandHandler = new CommandHandler(linkManager);
 
-        Scanner scanner = new Scanner(System.in);
+        try (Scanner scanner = new Scanner(System.in)) {
+            while (true) {
+                System.out.print("Enter a command: ");
+                String input = scanner.nextLine();
 
-        while (true) {
-            System.out.print("Enter a command: ");
-            String input = scanner.nextLine();
+                if (input.equalsIgnoreCase("exit")) {
+                    LOGGER.info("Exiting the application...");
+                    break; 
+                }
 
-            if (input.equalsIgnoreCase("exit")) {
-                LOGGER.info("Exiting the application...");
-                break; 
+                String result = commandHandler.handleCommand(input);
+                System.out.println(result);
             }
-
-            String result = commandHandler.handleCommand(input);
-            System.out.println(result);
         }
-        scanner.close();
     }
 
     private static void setupDirectories() {
-      File configDir = new File(CONFIG_DIR);
-      if (!configDir.exists()) {
-          if (configDir.mkdirs()) {
-              LOGGER.info("Config directory created successfully.");
-          } else {
-              LOGGER.severe("Failed to create config directory.");
-          }
-      }
+        createDirectoryIfNotExist(CONFIG_DIR);
+        createDirectoryIfNotExist(LOGS_DIR);
+    }
 
-      File logsDir = new File(LOGS_DIR);
-      if (!logsDir.exists()) {
-          if (logsDir.mkdirs()) {
-              LOGGER.info("Logs directory created successfully.");
-          } else {
-              LOGGER.severe("Failed to create logs directory.");
-          }
-      }
-  }
+    private static void createDirectoryIfNotExist(String directoryPath) {
+        File directory = new File(directoryPath);
+        if (!directory.exists()) {
+            if (directory.mkdirs()) { 
+                LOGGER.info(String.format("%s directory created successfully.", directoryPath));
+            } else {
+                LOGGER.severe(String.format("Failed to create %s directory.", directoryPath));
+            }
+        }
+    }
 
     private static void setupLogger() {
         LogManager.getLogManager().reset();
         LOGGER.setLevel(Level.ALL);
 
         ConsoleHandler ch = new ConsoleHandler();
-        ch.setLevel(Level.ALL);
+        ch.setLevel(Level.ALL); 
         LOGGER.addHandler(ch);
 
         try {
@@ -78,7 +73,8 @@ public class Main {
             fh.setFormatter(new SimpleFormatter());
             LOGGER.addHandler(fh);
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to create log file", e);
+            LOGGER.log(Level.SEVERE, String.format("Failed to create log file: %s",
+                    e.getMessage()), e); 
         }
     }
 }
@@ -88,43 +84,53 @@ class ConfigManager {
     private static final String CONFIG_FILE = "config/config.json";
     private static final String BANNED_IPS_FILE = "config/bannedip.json";
     private Config config;
-    private Set<String> bannedIPs;
-    private Map<String, Long> banExpiry = new HashMap<>(); 
+    private final Set<String> bannedIPs = new HashSet<>();
+    private final Map<String, Long> banExpiry = new HashMap<>();
+    private final String encryptionKey;
 
     public ConfigManager() {
-        loadConfig();
+        loadConfig(); 
         loadBannedIPs();
+
+        if (config.getEncryptionKey() == null || config.getEncryptionKey().isEmpty()) {
+            LOGGER.info("Generating new encryption key...");
+            encryptionKey = generateRandomKey(256);
+            config.setEncryptionKey(encryptionKey);
+            saveConfig(); 
+        } else {
+            encryptionKey = config.getEncryptionKey(); 
+        }
     }
 
     private void loadConfig() {
-        File configFile = new File(CONFIG_FILE);
+        File configFile = new File(CONFIG_FILE); 
         if (!configFile.exists()) {
             LOGGER.info("Config file does not exist. Creating default configuration.");
-            createDefaultConfig();
+            createDefaultConfig(); 
         } else {
             try {
-                String content = new String(Files.readAllBytes(Paths.get(CONFIG_FILE)));
+                String content = Files.readString(Paths.get(CONFIG_FILE));
                 config = Config.fromJson(content);
                 LOGGER.info("Configuration loaded successfully.");
             } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Failed to load configuration", e);
+                LOGGER.log(Level.SEVERE, "Failed to load configuration: " + 
+                            e.getMessage(), e); 
             }
         }
     }
 
     private void loadBannedIPs() {
         File bannedIPsFile = new File(BANNED_IPS_FILE);
-        bannedIPs = new HashSet<>();
         if (bannedIPsFile.exists()) {
             try {
-                String content = new String(Files.readAllBytes(Paths.get(BANNED_IPS_FILE)));
-                String[] ipArray = content.substring(1, content.length() - 1).split(", "); 
-                for (String ip : ipArray) {
-                    bannedIPs.add(ip.trim());
-                }
-                LOGGER.info("Banned IPs loaded successfully. Total banned IPs: " + bannedIPs.size());
+                String content = Files.readString(Paths.get(BANNED_IPS_FILE)); 
+                String[] ipArray = content.substring(1, content.length() - 1).split(", ");
+                bannedIPs.addAll(Arrays.asList(ipArray)); 
+                LOGGER.info(String.format("Banned IPs loaded successfully. Total banned IPs: %d",
+                                           bannedIPs.size())); 
             } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Failed to load banned IPs", e);
+                LOGGER.log(Level.SEVERE, "Failed to load banned IPs: " +
+                           e.getMessage(), e); 
             }
         }
     }
@@ -132,59 +138,62 @@ class ConfigManager {
     public void saveBannedIPs() {
         try {
             Path bannedIPsPath = Paths.get(BANNED_IPS_FILE);
-            Files.createDirectories(bannedIPsPath.getParent());
+            Files.createDirectories(bannedIPsPath.getParent()); 
             Files.write(bannedIPsPath, bannedIPs.toString().getBytes());
-            LOGGER.info("Banned IPs saved successfully.");
+            LOGGER.info("Banned IPs saved successfully."); 
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to save banned IPs", e);
+            LOGGER.log(Level.SEVERE, "Failed to save banned IPs: " +
+                       e.getMessage(), e);
         }
     }
 
     private void createDefaultConfig() {
-        config = new Config();
+        config = new Config(); 
         config.setAvailablePorts(new ArrayList<>(Arrays.asList(8000, 8001, 8002, 8003, 8004)));
-        config.setDdosProtectionEnabled(false);
-        config.setDdosTimeoutMinutes(30);
+        config.setDdosProtectionEnabled(false); 
+        config.setDdosTimeoutMinutes(30); 
         config.setCorsAllowedOrigins(new ArrayList<>(Arrays.asList("%"))); 
-        saveConfig();
+        config.setEncryptionKey("");
+        saveConfig(); 
     }
 
     private void saveConfig() {
         try {
             Path configPath = Paths.get(CONFIG_FILE);
-            Files.createDirectories(configPath.getParent());
+            Files.createDirectories(configPath.getParent()); 
             String json = config.toJson();
-            Files.write(configPath, json.getBytes());
+            Files.writeString(configPath, json); 
             LOGGER.info("Configuration saved successfully.");
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to save configuration", e);
+            LOGGER.log(Level.SEVERE, String.format("Failed to save configuration: %s",
+                                                     e.getMessage()), e);
         }
     }
 
     public List<Integer> getAvailablePorts() {
-        return config.getAvailablePorts();
+        return config.getAvailablePorts(); 
     }
 
     public void removeAvailablePort(int port) {
-        config.getAvailablePorts().remove(Integer.valueOf(port));
+        config.getAvailablePorts().remove(Integer.valueOf(port)); 
         saveConfig();
-        LOGGER.info("Port " + port + " removed from available ports.");
+        LOGGER.info(String.format("Port %d removed from available ports.", port));
     }
 
     public void addAvailablePort(int port) {
         config.getAvailablePorts().add(port);
-        saveConfig();
-        LOGGER.info("Port " + port + " added to available ports.");
+        saveConfig(); 
+        LOGGER.info(String.format("Port %d added to available ports.", port));
     }
 
     public boolean isDdosProtectionEnabled() {
-        return config.isDdosProtectionEnabled();
+        return config.isDdosProtectionEnabled(); 
     }
 
     public void setDdosProtectionEnabled(boolean enabled) {
         config.setDdosProtectionEnabled(enabled);
-        saveConfig();
-        LOGGER.info("DDoS protection " + (enabled ? "enabled" : "disabled"));
+        saveConfig(); 
+        LOGGER.info(String.format("DDoS protection %s", enabled ? "enabled" : "disabled"));
     }
 
     public int getDdosTimeoutMinutes() {
@@ -194,45 +203,69 @@ class ConfigManager {
     public void setDdosTimeoutMinutes(int minutes) {
         config.setDdosTimeoutMinutes(minutes);
         saveConfig();
-        LOGGER.info("DDoS timeout set to " + minutes + " minutes");
+        LOGGER.info(String.format("DDoS timeout set to %d minutes", minutes));
     }
 
     public boolean isIPBanned(String ip) {
-        if (bannedIPs.contains(ip)) {
+        if (bannedIPs.contains(ip)) { 
             return true;
         }
-        if (banExpiry.containsKey(ip)) {
+        if (banExpiry.containsKey(ip)) { 
             if (banExpiry.get(ip) > System.currentTimeMillis()) {
                 return true;
             } else {
                 banExpiry.remove(ip); 
-                return false;
+                return false; 
             }
         }
         return false;
     }
-    
 
     public void banIP(String ip) {
         bannedIPs.add(ip);
-        saveBannedIPs();
-        LOGGER.info("IP " + ip + " banned permanently");
+        saveBannedIPs(); 
+        LOGGER.info(String.format("IP %s banned permanently", ip));
     }
+
     public void banIP(String ip, long duration, TimeUnit unit) {
         long expiryTime = System.currentTimeMillis() + unit.toMillis(duration);
-        banExpiry.put(ip, expiryTime);
-        LOGGER.info("IP " + ip + " banned temporarily for " + duration + " " + unit.toString().toLowerCase());
+        banExpiry.put(ip, expiryTime); 
+        LOGGER.info(String.format("IP %s banned temporarily for %d %s",
+                                   ip, duration, unit.toString().toLowerCase())); 
     }
-  public List<String> getCorsAllowedOrigins() {
-    return config.getCorsAllowedOrigins();
-  }
+
+    public List<String> getCorsAllowedOrigins() {
+        return config.getCorsAllowedOrigins();
+    }
+
+    public String getEncryptionKey() {
+        return encryptionKey; 
+    }
+
+    private String generateRandomKey(int keySize) {
+        try {
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+            keyGen.init(keySize); 
+            SecretKey key = keyGen.generateKey();
+            return Base64.getEncoder().encodeToString(key.getEncoded());
+        } catch (NoSuchAlgorithmException e) {
+            LOGGER.log(Level.SEVERE, String.format("Error generating encryption key: %s",
+                    e.getMessage()), e);
+            return null;
+        }
+    }
 }
 
 class Config {
     private List<Integer> availablePorts;
-    private boolean ddosProtectionEnabled;
+    private boolean ddosProtectionEnabled; 
     private int ddosTimeoutMinutes;
     private List<String> corsAllowedOrigins;
+    private String encryptionKey;
+
+    public Config() {
+        this.encryptionKey = ""; 
+    }
 
     public List<String> getCorsAllowedOrigins() {
         return corsAllowedOrigins;
@@ -243,11 +276,11 @@ class Config {
     }
 
     public List<Integer> getAvailablePorts() {
-        return availablePorts;
+        return availablePorts; 
     }
 
     public void setAvailablePorts(List<Integer> availablePorts) {
-        this.availablePorts = availablePorts;
+        this.availablePorts = availablePorts; 
     }
 
     public boolean isDdosProtectionEnabled() {
@@ -259,40 +292,48 @@ class Config {
     }
 
     public int getDdosTimeoutMinutes() {
-        return ddosTimeoutMinutes;
+        return ddosTimeoutMinutes; 
     }
 
     public void setDdosTimeoutMinutes(int ddosTimeoutMinutes) {
-        this.ddosTimeoutMinutes = ddosTimeoutMinutes;
+        this.ddosTimeoutMinutes = ddosTimeoutMinutes; 
+    }
+
+    public String getEncryptionKey() {
+        return encryptionKey;
+    }
+
+    public void setEncryptionKey(String encryptionKey) {
+        this.encryptionKey = encryptionKey;
     }
 
     public String toJson() {
         StringBuilder sb = new StringBuilder();
-        sb.append("{\"availablePorts\":[");
+        sb.append("{\"availablePorts\":["); 
         for (int i = 0; i < availablePorts.size(); i++) {
             sb.append(availablePorts.get(i));
             if (i < availablePorts.size() - 1) {
-                sb.append(",");
+                sb.append(","); 
             }
         }
-        sb.append("],\"ddosProtectionEnabled\":")
-                .append(ddosProtectionEnabled)
-                .append(",\"ddosTimeoutMinutes\":")
-                .append(ddosTimeoutMinutes)
-                .append(",\"corsAllowedOrigins\":[");
+        sb.append(String.format("],\"ddosProtectionEnabled\":%b," +
+                                "\"ddosTimeoutMinutes\":%d," +
+                                "\"corsAllowedOrigins\":[", 
+                                ddosProtectionEnabled, ddosTimeoutMinutes)); 
+        
         for (int i = 0; i < corsAllowedOrigins.size(); i++) {
-            sb.append("\"").append(corsAllowedOrigins.get(i)).append("\"");
+            sb.append(String.format("\"%s\"", corsAllowedOrigins.get(i)));
             if (i < corsAllowedOrigins.size() - 1) {
                 sb.append(",");
             }
         }
-        sb.append("]}");
+        sb.append(String.format("],\"encryptionKey\":\"%s\"}", encryptionKey));
         return sb.toString();
     }
 
     public static Config fromJson(String json) {
-        Config config = new Config();
-        String[] parts = json.split("\\[|\\]");
+        Config config = new Config(); 
+        String[] parts = json.split("\\[|\\]"); 
         if (parts.length > 1) {
             String[] portStrings = parts[1].split(",");
             List<Integer> ports = new ArrayList<>();
@@ -305,15 +346,22 @@ class Config {
         Pattern corsPattern = Pattern.compile("\"corsAllowedOrigins\":\\[(.*?)\\]");
         Matcher corsMatcher = corsPattern.matcher(json);
         if (corsMatcher.find()) {
-            String[] originStrings = corsMatcher.group(1).split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
-            List<String> origins = new ArrayList<>();
+            String[] originStrings = corsMatcher.group(1)
+                                           .split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"); 
+            List<String> origins = new ArrayList<>(); 
             for (String originString : originStrings) {
-                origins.add(originString.trim().replaceAll("[\"]+", ""));
+                origins.add(originString.trim().replaceAll("[\"]+", "")); 
             }
-            config.setCorsAllowedOrigins(origins);
+            config.setCorsAllowedOrigins(origins); 
         }
 
-        String[] settings = json.split(",");
+        Pattern encryptionKeyPattern = Pattern.compile("\"encryptionKey\":\"(.*?)\"");
+        Matcher encryptionKeyMatcher = encryptionKeyPattern.matcher(json);
+        if (encryptionKeyMatcher.find()) {
+            config.setEncryptionKey(encryptionKeyMatcher.group(1));
+        }
+
+        String[] settings = json.split(","); 
         for (String setting : settings) {
             if (setting.contains("ddosProtectionEnabled")) {
                 config.setDdosProtectionEnabled(Boolean.parseBoolean(setting.split(":")[1].trim()));
@@ -329,31 +377,33 @@ class LinkManager {
     private static final Logger LOGGER = Logger.getLogger(LinkManager.class.getName());
     private static final String LINKS_FILE = "config/links.json";
     private Map<String, Link> links;
-    private ConfigManager configManager;
-    private Map<String, IpReputation> ipReputations = new ConcurrentHashMap<>();
-    private static final int MAX_REQUESTS_PER_SECOND = 5; 
+    private final ConfigManager configManager;
+    private static final int MAX_REQUESTS_PER_SECOND = 5;
     private static final long TEMP_BAN_DURATION_MINUTES = 2; 
-    private static final String ENCRYPTION_KEY = generateRandomKey(256); 
-
-    private Map<String, Deque<Long>> recentRequests = new ConcurrentHashMap<>(); 
+    private static final String BLOCKED_CONTENT_FILE = "config/blocked_content.json";
+    private final Set<String> blockedContent = new HashSet<>();
+    private final Map<String, Deque<Long>> recentRequests = new ConcurrentHashMap<>();
 
     public LinkManager(ConfigManager configManager) {
         this.configManager = configManager;
-        loadLinks();
+        loadLinks(); 
+        loadBlockedContent();
     }
 
     private void loadLinks() {
-        File linksFile = new File(LINKS_FILE);
+        File linksFile = new File(LINKS_FILE); 
         if (!linksFile.exists() || linksFile.length() == 0) {
             links = new HashMap<>();
             LOGGER.info("Links file does not exist or is empty. Starting with no links.");
         } else {
             try {
-                String content = new String(Files.readAllBytes(Paths.get(LINKS_FILE)));
+                String content = Files.readString(Paths.get(LINKS_FILE)); 
                 links = Link.fromJsonMap(content);
-                LOGGER.info("Links loaded successfully. Total links: " + links.size());
+                LOGGER.info(String.format("Links loaded successfully. Total links: %d",
+                        links.size())); 
             } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Failed to load links", e);
+                LOGGER.log(Level.SEVERE, String.format("Failed to load links: %s", 
+                                                        e.getMessage()), e); 
                 links = new HashMap<>();
             }
         }
@@ -364,245 +414,293 @@ class LinkManager {
             Path linksPath = Paths.get(LINKS_FILE);
             Files.createDirectories(linksPath.getParent());
             String json = Link.toJsonMap(links);
-            Files.write(linksPath, json.getBytes());
-            LOGGER.info("Links saved successfully.");
+            Files.writeString(linksPath, json);
+            LOGGER.info("Links saved successfully."); 
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to save links", e);
+            LOGGER.log(Level.SEVERE, String.format("Failed to save links: %s",
+                    e.getMessage()), e); 
         }
     }
 
-    private static String generateRandomKey(int keySize) {
-        try {
-            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-            keyGen.init(keySize); 
-            SecretKey key = keyGen.generateKey();
-            return Base64.getEncoder().encodeToString(key.getEncoded());
-        } catch (NoSuchAlgorithmException e) {
-            LOGGER.severe("Error generating encryption key: " + e.getMessage());
-            return null;
+    private void loadBlockedContent() {
+        File blockedContentFile = new File(BLOCKED_CONTENT_FILE);
+        if (blockedContentFile.exists()) {
+            try (FileReader reader = new FileReader(BLOCKED_CONTENT_FILE); 
+                BufferedReader bufferedReader = new BufferedReader(reader)) { 
+                String line;
+                while ((line = bufferedReader.readLine()) != null) {
+                    line = line.trim(); 
+                    if (!line.isEmpty()) {
+                        blockedContent.add(line); 
+                    }
+                }
+                LOGGER.info(String.format("Blocked content loaded successfully. Total blocked entries: %d",
+                        blockedContent.size()));
+            } catch (IOException e) {
+                LOGGER.log(Level.SEVERE, "Error loading blocked content: " +
+                            e.getMessage(), e);
+            }
+        } else {
+            LOGGER.warning("Blocked content file not found. Creating an empty file.");
+            try {
+                if (blockedContentFile.createNewFile()) {
+                    LOGGER.info("Blocked content file created successfully"); 
+                } else {
+                    LOGGER.warning("Blocked content file already exists."); 
+                }
+            } catch (IOException e) {
+                LOGGER.log(Level.SEVERE, String.format("Error creating blocked content file: %s",
+                                                       e.getMessage()), e);
+            }
         }
     }
+
+    public void blockContent(String content) {
+        if (content == null || content.trim().isEmpty()) { 
+            return; 
+        }
+        blockedContent.add(content.trim());
+        saveBlockedContent();
+        LOGGER.info(String.format("Content blocked: %s", content)); 
+    }
+
+    private void saveBlockedContent() {
+        try (FileWriter writer = new FileWriter(BLOCKED_CONTENT_FILE)) { 
+            for (String content : blockedContent) { 
+                writer.write(content + System.lineSeparator()); 
+            }
+            LOGGER.info("Blocked content list saved successfully."); 
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, String.format("Error saving blocked content: %s",
+                                                     e.getMessage()), e); 
+        }
+    }
+
 
     public String addLink(String name, String targetAddress, String mode) {
+        if (!isValidLinkName(name)) {
+            return "Invalid link name. Use alphanumeric characters and hyphens only."; 
+        }
+
+        if (!isValidTargetAddress(targetAddress)) {
+            return "Invalid target address format. Use IP:PORT.";
+        }
+
         if (links.containsKey(name)) {
-            LOGGER.warning("Attempt to add duplicate link: " + name);
-            return "Link with this name already exists.";
+            LOGGER.warning(String.format("Attempt to add duplicate link: %s", name)); 
+            return "Link with this name already exists."; 
         }
 
         String[] addressParts = targetAddress.split(":");
         if (addressParts.length != 2) {
-            LOGGER.warning("Invalid target address format: " + targetAddress);
+            LOGGER.warning(String.format("Invalid target address format: %s", targetAddress));
             return "Invalid target address format. Use IP:PORT.";
         }
 
-        List<Integer> availablePorts = configManager.getAvailablePorts();
-        if (availablePorts.isEmpty()) {
-            LOGGER.warning("No available ports for new link: " + name);
+        List<Integer> availablePorts = configManager.getAvailablePorts(); 
+        if (availablePorts.isEmpty()) { 
+            LOGGER.warning(String.format("No available ports for new link: %s", name)); 
             return "No available ports.";
         }
 
         int assignedPort = availablePorts.get(0);
         configManager.removeAvailablePort(assignedPort);
 
-        Link link = new Link(targetAddress, assignedPort, mode);
+        Link link = new Link(targetAddress, assignedPort, mode); 
         links.put(name, link);
         saveLinks();
 
-        LOGGER.info("Link added: " + name + ", Target: " + targetAddress +
-                ", Assigned Port: " + assignedPort + ", Mode: " + mode);
-        return "Link added successfully. Name: " + name + ", Target: " + targetAddress +
-                ", Assigned Port: " + assignedPort + ", Mode: " + mode;
+        LOGGER.info(String.format("Link added: %s, Target: %s, Assigned Port: %d, Mode: %s",
+                                    name, targetAddress, assignedPort, mode));
+        return String.format("Link added successfully. " + 
+                               "Name: %s, Target: %s, Assigned Port: %d, Mode: %s", 
+                               name, targetAddress, assignedPort, mode); 
     }
 
     public String removeLink(String name) {
-        Link link = links.remove(name);
+        Link link = links.remove(name); 
         if (link == null) {
-            LOGGER.warning("Attempt to remove non-existent link: " + name);
+            LOGGER.warning(String.format("Attempt to remove non-existent link: %s", name)); 
             return "Link not found.";
         }
 
         configManager.addAvailablePort(link.getAssignedPort());
         saveLinks();
         stopProxyServer(link); 
-        LOGGER.info("Link removed: " + name + ", Assigned Port " + link.getAssignedPort()
-                + " returned to available ports.");
-        return "Link removed successfully. Name: " + name + ", Assigned Port " + link.getAssignedPort()
-                + " is now available.";
+        LOGGER.info(String.format("Link removed: %s, Assigned Port %d returned to available ports.",
+                                  name, link.getAssignedPort())); 
+        return String.format("Link removed successfully. Name: %s, Assigned Port %d is now available.", 
+                             name, link.getAssignedPort()); 
     }
 
     public String startLink(String name) {
         Link link = links.get(name);
         if (link == null) {
-            LOGGER.warning("Attempt to start non-existent link: " + name);
-            return "Link not found.";
+            LOGGER.warning(String.format("Attempt to start non-existent link: %s", name)); 
+            return "Link not found."; 
         }
 
-        link.setActive(true);
-        saveLinks();
+        link.setActive(true); 
+        saveLinks(); 
 
-        startProxyServer(link);
+        startProxyServer(link); 
 
-        LOGGER.info("Link started: " + name + ", Target: " + link.getTargetAddress() + ", Port: "
-                + link.getAssignedPort());
-        return "Link started successfully. Name: " + name + ", Target: " + link.getTargetAddress() + ", Port: "
-                + link.getAssignedPort();
+        LOGGER.info(String.format("Link started: %s, Target: %s, Port: %d", 
+                                   name, link.getTargetAddress(), link.getAssignedPort())); 
+        return String.format("Link started successfully. Name: %s, Target: %s, Port: %d", 
+                               name, link.getTargetAddress(), link.getAssignedPort());
     }
 
     public String stopLink(String name) {
         Link link = links.get(name);
         if (link == null) {
-            LOGGER.warning("Attempt to stop non-existent link: " + name);
+            LOGGER.warning(String.format("Attempt to stop non-existent link: %s", name)); 
             return "Link not found.";
         }
 
-        link.setActive(false);
-        saveLinks();
+        link.setActive(false); 
+        saveLinks(); 
 
         stopProxyServer(link); 
 
-        LOGGER.info("Link stopped: " + name + ", Target: " + link.getTargetAddress() + ", Port: "
-                + link.getAssignedPort());
-        return "Link stopped successfully. Name: " + name + ", Target: " + link.getTargetAddress() + ", Port: "
-                + link.getAssignedPort();
+        LOGGER.info(String.format("Link stopped: %s, Target: %s, Port: %d",
+                name, link.getTargetAddress(), link.getAssignedPort()));
+        return String.format("Link stopped successfully. " +
+                             "Name: %s, Target: %s, Port: %d", 
+                             name, link.getTargetAddress(), link.getAssignedPort()); 
     }
 
     private void startProxyServer(Link link) {
         new Thread(() -> {
             try (ServerSocket serverSocket = new ServerSocket(link.getAssignedPort())) {
-                LOGGER.info("Proxy server started on port " + link.getAssignedPort() + " for target "
-                        + link.getTargetAddress());
+                LOGGER.info(String.format("Proxy server started on port %d for target %s", 
+                                         link.getAssignedPort(), link.getTargetAddress())); 
                 while (link.isActive()) {
-                    Socket clientSocket = serverSocket.accept();
-                    handleClient(clientSocket, link);
+                    try (Socket clientSocket = serverSocket.accept()) {
+                        handleClient(clientSocket, link); 
+                    } catch (IOException e) {
+                        LOGGER.log(Level.WARNING, String.format("Error accepting client connection: %s",
+                                                                e.getMessage()), e); 
+                    }
                 }
             } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Failed to start proxy server on port " + link.getAssignedPort(), e);
+                LOGGER.log(Level.SEVERE, String.format("Failed to start proxy server on port %d: %s",
+                        link.getAssignedPort(), e.getMessage()), e);
             }
         }).start();
     }
 
     private void stopProxyServer(Link link) {
-
-        LOGGER.info("Proxy server on port " + link.getAssignedPort() + " is being stopped.");
+        LOGGER.info(String.format("Proxy server on port %d is being stopped.",
+                                   link.getAssignedPort())); 
     }
 
     private void handleClient(Socket clientSocket, Link link) {
-        String clientIP = ((InetSocketAddress) clientSocket.getRemoteSocketAddress()).getAddress().getHostAddress();
-        LOGGER.info("Client connected: " + clientIP);
+        String clientIP = ((InetSocketAddress) clientSocket.getRemoteSocketAddress())
+                .getAddress().getHostAddress(); 
+        LOGGER.info(String.format("Client connected: %s", clientIP)); 
 
         if (configManager.isIPBanned(clientIP)) {
-            LOGGER.warning("Banned IP detected: " + clientIP + ". Connection dropped.");
+            LOGGER.warning(String.format("Banned IP detected: %s. Connection dropped.", clientIP));
             try {
-                clientSocket.close();
+                clientSocket.close(); 
                 return; 
             } catch (IOException e) {
-                LOGGER.log(Level.WARNING, "Failed to close client socket", e);
+                LOGGER.log(Level.WARNING, String.format("Failed to close client socket: %s", 
+                        e.getMessage()), e); 
             }
         }
 
-        if (configManager.isDdosProtectionEnabled() && isDDoSAttack(clientIP)) {
-            LOGGER.warning("DDoS attack detected from " + clientIP + "! Connection temporarily blocked.");
-            logDDoSAttempt(clientIP);
-            configManager.banIP(clientIP, TEMP_BAN_DURATION_MINUTES, TimeUnit.MINUTES);
-            try {
-                clientSocket.close();
-                return; 
-            } catch (IOException e) {
-                LOGGER.log(Level.WARNING, "Failed to close client socket", e);
-            }
-        }
 
         try {
             if (!handleCors(clientSocket, link)) {
                 return; 
             }
         } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Error handling CORS: " + e.getMessage());
-            return;
+            LOGGER.log(Level.WARNING, String.format("Error handling CORS: %s",
+                    e.getMessage()), e);
+            return; 
         }
 
         new Thread(() -> {
-            String targetAddress = link.getTargetAddress();
+            String targetAddress = link.getTargetAddress(); 
             String[] addressParts = targetAddress.split(":");
-            String targetHost = addressParts[0];
-            int targetPort = Integer.parseInt(addressParts[1]);
+            String targetHost = addressParts[0]; 
+            int targetPort = Integer.parseInt(addressParts[1]); 
 
-            try (Socket targetSocket = new Socket(targetHost, targetPort)) {
-                LOGGER.info("Proxying connection from " + clientSocket.getRemoteSocketAddress() + " to " + targetHost + ":"
-                        + targetPort);
+            try (Socket targetSocket = new Socket(targetHost, targetPort); 
+                 InputStream clientInput = clientSocket.getInputStream(); 
+                 OutputStream clientOutput = clientSocket.getOutputStream(); 
+                 InputStream targetInput = targetSocket.getInputStream(); 
+                 OutputStream targetOutput = targetSocket.getOutputStream()) { 
+                
+                LOGGER.info(String.format("Proxying connection from %s to %s:%d", 
+                                        clientSocket.getRemoteSocketAddress(), targetHost, targetPort)); 
 
-                InputStream clientInput = clientSocket.getInputStream();
-                OutputStream clientOutput = clientSocket.getOutputStream();
-                InputStream targetInput = targetSocket.getInputStream();
-                OutputStream targetOutput = targetSocket.getOutputStream();
-
-                if (link.getMode().equals("forward")) {
-                    new Thread(() -> forwardData(clientInput, targetOutput)).start();
-                    forwardData(targetInput, clientOutput);
-                } else if (link.getMode().equals("ddosprot")) {
-                    handleDDoSProtectedConnection(clientSocket, targetSocket); 
-                } else if (link.getMode().equals("filterddosprot")) {
-                    handleFilteredDDoSProtectedConnection(clientSocket, targetHost, targetPort, clientIP);
-                }
+                switch (link.getMode()) {
+                    case "forward" -> { 
+                        new Thread(() -> forwardData(clientInput, targetOutput)).start();
+                        forwardData(targetInput, clientOutput); 
+                    }
+                    case "ddosprot" -> handleDDoSProtectedConnection(clientSocket, targetSocket, clientIP);
+                    case "filterddosprot" -> handleFilteredDDoSProtectedConnection(clientSocket, targetHost, targetPort, clientIP);
+                    default -> LOGGER.severe(String.format("Unknown link mode: %s", link.getMode()));
+                } 
             } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Error in proxy connection to " + targetAddress + ": " + e.getMessage());
-            } finally {
-                try {
-                    clientSocket.close();
-                } catch (IOException e) {
-                    LOGGER.log(Level.WARNING, "Failed to close client socket", e);
-                }
+                LOGGER.log(Level.SEVERE, String.format("Error in proxy connection to %s, Error: %s", 
+                        targetAddress, e.getMessage()), e);
             }
         }).start();
     }
 
     private boolean handleCors(Socket clientSocket, Link link) throws IOException {
-        InputStream clientInput = clientSocket.getInputStream();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(clientInput));
-        OutputStream clientOutput = clientSocket.getOutputStream();
+        try (InputStream clientInput = clientSocket.getInputStream();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(clientInput)); 
+            OutputStream clientOutput = clientSocket.getOutputStream()) {
 
-        String origin = null;
-        String requestMethod = null;
-        String requestHeaders = null;
-        String line;
-        while ((line = reader.readLine()) != null && !line.isEmpty()) {
-            if (line.startsWith("Origin: ")) {
-                origin = line.substring("Origin: ".length());
-            } else if (line.startsWith("Access-Control-Request-Method: ")) {
-                requestMethod = line.substring("Access-Control-Request-Method: ".length());
-            } else if (line.startsWith("Access-Control-Request-Headers: ")) {
-                requestHeaders = line.substring("Access-Control-Request-Headers: ".length());
+            String origin = null; 
+            String requestMethod = null;
+            String line; 
+            while ((line = reader.readLine()) != null && !line.isEmpty()) { 
+                if (line.startsWith("Origin: ")) {
+                    origin = line.substring("Origin: ".length());
+                } else if (line.startsWith("Access-Control-Request-Method: ")) {
+                    requestMethod = line.substring("Access-Control-Request-Method: ".length()); 
+                }
+
+                if (origin != null && (requestMethod != null || !link.getMode().equals("filterddosprot"))) { 
+                    break; 
+                }
             }
 
-            if (origin != null && (requestMethod != null || !link.getMode().equals("filterddosprot"))) {
-                break;
-            }
-        }
+            List<String> allowedOrigins = configManager.getCorsAllowedOrigins();
+            boolean allowAllOrigins = allowedOrigins.contains("%"); 
 
-        List<String> allowedOrigins = configManager.getCorsAllowedOrigins();
-        boolean allowAllOrigins = allowedOrigins.contains("%");
+            if (origin != null && (allowAllOrigins || allowedOrigins.contains(origin))) { 
+                clientOutput.write("HTTP/1.1 200 OK\r\n".getBytes()); 
+                clientOutput.write(String.format("Access-Control-Allow-Origin: %s\r\n", origin) 
+                                     .getBytes()); 
+                clientOutput.write("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n" 
+                                     .getBytes()); 
+                clientOutput.write("Access-Control-Allow-Headers: Content-Type, Authorization\r\n"
+                                    .getBytes()); 
+                clientOutput.write("\r\n".getBytes()); 
+                clientOutput.flush();
 
-        if (origin != null && (allowAllOrigins || allowedOrigins.contains(origin))) {
-            clientOutput.write("HTTP/1.1 200 OK\r\n".getBytes());
-            clientOutput.write(("Access-Control-Allow-Origin: " + origin + "\r\n").getBytes());
-            clientOutput.write("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n".getBytes());
-            clientOutput.write("Access-Control-Allow-Headers: Content-Type, Authorization\r\n".getBytes());
-            clientOutput.write("\r\n".getBytes());
-            clientOutput.flush();
-
-            if (requestMethod != null) {
+                if (requestMethod != null) {
+                    clientSocket.close(); 
+                    return false;
+                }
+            } else if (origin != null) {
+                clientOutput.write("HTTP/1.1 403 Forbidden\r\n".getBytes()); 
+                clientOutput.write("\r\n".getBytes()); 
+                clientOutput.flush(); 
                 clientSocket.close();
-                return false;
+                return false; 
             }
-        } else if (origin != null) {
-            clientOutput.write("HTTP/1.1 403 Forbidden\r\n".getBytes());
-            clientOutput.write("\r\n".getBytes());
-            clientOutput.flush();
-            clientSocket.close();
-            return false;
-        }
 
-        return true;
+            return true;
+        }
     }
 
     private void forwardData(InputStream input, OutputStream output) {
@@ -610,153 +708,180 @@ class LinkManager {
             byte[] buffer = new byte[8192];
             int bytesRead;
             while ((bytesRead = input.read(buffer)) != -1) {
-                output.write(buffer, 0, bytesRead);
-                output.flush();
+                output.write(buffer, 0, bytesRead); 
+                output.flush(); 
             }
         } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Data forwarding error: " + e.getMessage());
+            LOGGER.log(Level.WARNING, String.format("Data forwarding error: %s", 
+                                                   e.getMessage()), e);
         }
     }
 
-    private boolean isDDoSAttack(String ip) {
+    private boolean isDDoSAttack(String ip, String path) {
         long currentTime = System.currentTimeMillis();
-        int requestWindowSeconds = 1;
+        int requestWindowSeconds = 1; 
 
-        Deque<Long> requestTimes = recentRequests.computeIfAbsent(ip, k -> new LinkedList<>());
+        String key = ip + "-" + path;
+        Deque<Long> requestTimes = recentRequests.computeIfAbsent(key, k -> new LinkedList<>());
         requestTimes.addLast(currentTime);
 
-        while (!requestTimes.isEmpty() && currentTime - requestTimes.getFirst() > requestWindowSeconds * 1000) {
+        while (!requestTimes.isEmpty() &&
+               currentTime - requestTimes.getFirst() > requestWindowSeconds * 1000) { 
             requestTimes.removeFirst();
         }
 
-        if (requestTimes.size() > MAX_REQUESTS_PER_SECOND) {
-            LOGGER.warning("Rate limiting triggered for IP: " + ip + ". Request count: " + requestTimes.size());
-            return true;
+        if (requestTimes.size() > MAX_REQUESTS_PER_SECOND) { 
+            LOGGER.warning(String.format("Rate limiting triggered for IP: %s on path: %s. Request count: %d",
+                                           ip, path, requestTimes.size())); 
+            return true; 
         }
         return false;
     }
 
     private void logDDoSAttempt(String ip) {
-        try {
+        try (FileWriter writer = new FileWriter(Main.LOGS_DIR + "/ddoslogs.txt", true)) { 
             Files.createDirectories(Paths.get(Main.LOGS_DIR)); 
-            FileWriter writer = new FileWriter(Main.LOGS_DIR + "/ddoslogs.txt", true);
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-            LocalDateTime now = LocalDateTime.now();
-            writer.write("[" + dtf.format(now) + "] Potential DDoS attack detected from: " + ip + "\n");
-            writer.close();
+            LocalDateTime now = LocalDateTime.now(); 
+            writer.write(String.format("[%s] Potential DDoS attack detected from: %s%n", 
+                                       dtf.format(now), ip));
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Failed to log DDoS attempt", e);
+            LOGGER.log(Level.SEVERE, String.format("Failed to log DDoS attempt: %s", 
+                                                     e.getMessage()), e);
         }
     }
 
     private String encryptRequest(String request, String key) throws Exception {
-        SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), "AES");
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), "AES"); 
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding"); 
         cipher.init(Cipher.ENCRYPT_MODE, keySpec);
 
         byte[] iv = cipher.getIV();
         byte[] encrypted = cipher.doFinal(request.getBytes());
-        return Base64.getEncoder().encodeToString(iv) + ":" + Base64.getEncoder().encodeToString(encrypted);
+        return Base64.getEncoder().encodeToString(iv) + ":" +
+               Base64.getEncoder().encodeToString(encrypted); 
     }
 
     private String decryptResponse(InputStream inputStream, String key) throws Exception {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        String encryptedResponse = reader.readLine();
-        if (encryptedResponse == null) {
-            return "";
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) { 
+            String encryptedResponse = reader.readLine(); 
+            if (encryptedResponse == null) { 
+                return ""; 
+            }
+
+            String[] parts = encryptedResponse.split(":");
+            byte[] iv = Base64.getDecoder().decode(parts[0]); 
+            byte[] encryptedBytes = Base64.getDecoder().decode(parts[1]); 
+
+            SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), "AES"); 
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding"); 
+            cipher.init(Cipher.DECRYPT_MODE, keySpec, new IvParameterSpec(iv));
+
+            byte[] decrypted = cipher.doFinal(encryptedBytes);
+            return new String(decrypted);
         }
-
-        String[] parts = encryptedResponse.split(":");
-        byte[] iv = Base64.getDecoder().decode(parts[0]);
-        byte[] encryptedBytes = Base64.getDecoder().decode(parts[1]);
-
-        SecretKeySpec keySpec = new SecretKeySpec(key.getBytes(), "AES");
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        cipher.init(Cipher.DECRYPT_MODE, keySpec, new IvParameterSpec(iv));
-
-        byte[] decrypted = cipher.doFinal(encryptedBytes);
-        return new String(decrypted);
     }
 
-    private void handleDDoSProtectedConnection(Socket clientSocket, Socket targetSocket) { 
-        try {
-            InputStream clientInput = clientSocket.getInputStream();
-            OutputStream clientOutput = clientSocket.getOutputStream();
-            InputStream targetInput = targetSocket.getInputStream();
-            OutputStream targetOutput = targetSocket.getOutputStream();
+    private void handleDDoSProtectedConnection(Socket clientSocket, Socket targetSocket, 
+                                            String clientIP) { 
+        try (InputStream clientInput = clientSocket.getInputStream();
+             OutputStream clientOutput = clientSocket.getOutputStream(); 
+             InputStream targetInput = targetSocket.getInputStream(); 
+             OutputStream targetOutput = targetSocket.getOutputStream(); 
+             BufferedReader reader = new BufferedReader(new InputStreamReader(clientInput))) { 
+
+            String requestLine = reader.readLine(); 
+
+            if (requestLine != null) {
+                String[] requestParts = requestLine.split(" ");
+                if (requestParts.length > 1) { 
+                    String path = requestParts[1];
+                    if (isDDoSAttack(clientIP, path)) { 
+                        configManager.banIP(clientIP, TEMP_BAN_DURATION_MINUTES, TimeUnit.MINUTES);
+                        clientSocket.close(); 
+                        LOGGER.warning(String.format("DDoS attack detected from %s on path %s! " + 
+                                                      "Connection temporarily blocked.", 
+                                                     clientIP, path)); 
+                        logDDoSAttempt(clientIP); 
+                        return; 
+                    }
+                }
+            }
 
             new Thread(() -> forwardData(clientInput, targetOutput)).start();
-            forwardData(targetInput, clientOutput);
+            forwardData(targetInput, clientOutput); 
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Error in DDoS protected connection: " + e.getMessage());
-        }
+            LOGGER.log(Level.SEVERE, String.format("Error in DDoS protected connection: %s", 
+                                                   e.getMessage()), e); 
+        } 
     }
 
-    private void handleFilteredDDoSProtectedConnection(Socket clientSocket, String targetHost, int targetPort, String clientIP) {
-        try {
-            InputStream clientInput = clientSocket.getInputStream();
-            String rawRequest = readRequest(clientInput);
-            String sanitizedRequest = sanitizeRequest(rawRequest, clientIP);
-            if (sanitizedRequest == null) {
+    private void handleFilteredDDoSProtectedConnection(Socket clientSocket, String targetHost,
+                                                       int targetPort, String clientIP) { 
+        try (Socket targetSocket = new Socket(targetHost, targetPort);
+             InputStream clientInput = clientSocket.getInputStream();
+             OutputStream clientOutput = clientSocket.getOutputStream();
+             OutputStream targetOutput = targetSocket.getOutputStream(); 
+             PrintWriter targetWriter = new PrintWriter(targetOutput, true); 
+             InputStream targetInput = targetSocket.getInputStream()) {
+
+            String rawRequest = readRequest(clientInput); 
+            String sanitizedRequest = sanitizeRequest(rawRequest, clientIP); 
+            if (sanitizedRequest == null) { 
                 LOGGER.warning("Request sanitization failed. Dropping connection.");
                 clientSocket.close();
                 return;
             }
 
-            String encryptedRequest = encryptRequest(sanitizedRequest, ENCRYPTION_KEY);
-
-            Socket targetSocket = new Socket(targetHost, targetPort);
-            OutputStream targetOutput = targetSocket.getOutputStream();
-            PrintWriter targetWriter = new PrintWriter(targetOutput, true);
+            String encryptedRequest = encryptRequest(sanitizedRequest, configManager.getEncryptionKey()); 
             targetWriter.print(encryptedRequest);
+            targetWriter.flush();
 
-            InputStream targetInput = targetSocket.getInputStream();
-            OutputStream clientOutput = clientSocket.getOutputStream();
-            String decryptedResponse = decryptResponse(targetInput, ENCRYPTION_KEY);
-            clientOutput.write(decryptedResponse.getBytes());
-            clientOutput.flush();
+            String decryptedResponse = decryptResponse(targetInput, configManager.getEncryptionKey()); 
+            clientOutput.write(decryptedResponse.getBytes()); 
+            clientOutput.flush(); 
 
-            targetSocket.close();
-            clientSocket.close();
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error in filtered DDoS protected connection", e);
+            LOGGER.log(Level.SEVERE, String.format("Error in filtered DDoS protected connection: %s",
+                                                    e.getMessage()), e);
         }
     }
 
-
     private String readRequest(InputStream inputStream) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        StringBuilder requestBuilder = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null && !line.isEmpty()) {
-            requestBuilder.append(line).append("\r\n");
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            StringBuilder requestBuilder = new StringBuilder();
+            String line           ;
+            while ((line = reader.readLine()) != null && !line.isEmpty()) {
+                requestBuilder.append(line).append("\r\n");
+            }
+            requestBuilder.append("\r\n");
+            return requestBuilder.toString();
         }
-        requestBuilder.append("\r\n"); 
-        return requestBuilder.toString();
     }
 
     private String sanitizeRequest(String request, String clientIP) {
         String sanitizedRequest = removeMaliciousHeaders(request);
         sanitizedRequest = sanitizeCookies(sanitizedRequest, clientIP);
+        sanitizedRequest = filterBlockedContent(sanitizedRequest);
         return sanitizedRequest;
     }
 
     private String removeMaliciousHeaders(String request) {
-        List<String> blacklistedHeaders = Arrays.asList("cookie", "referer", "user-agent", 
+        List<String> blacklistedHeaders = Arrays.asList("cookie", "referer", "user-agent",
                 "x-forwarded-for", "x-forwarded-host");
         StringBuilder sanitizedRequest = new StringBuilder();
         String[] lines = request.split("\r\n");
         for (String line : lines) {
             if (line.isEmpty()) {
                 sanitizedRequest.append(line).append("\r\n");
-                continue;
+                continue; 
             }
             boolean headerIsBlacklisted = blacklistedHeaders.stream()
                     .anyMatch(blacklistedHeader -> line.toLowerCase().startsWith(blacklistedHeader + ":"));
             if (!headerIsBlacklisted) {
                 sanitizedRequest.append(line).append("\r\n");
             } else {
-                LOGGER.warning("Removed potentially malicious header: " + line);
+                LOGGER.warning(String.format("Removed potentially malicious header: %s", line));
             }
         }
         return sanitizedRequest.toString();
@@ -767,49 +892,69 @@ class LinkManager {
         String[] lines = request.split("\r\n");
         for (String line : lines) {
             if (line.toLowerCase().startsWith("cookie: ")) {
-                String[] cookies = line.substring("Cookie: ".length()).split("; ");
+                String[] cookies = line.substring("Cookie: ".length()).split("; "); 
                 for (String cookie : cookies) {
-                    String[] parts = cookie.split("=", 2);
+                    String[] parts = cookie.split("=", 2); 
                     if (parts.length == 2) {
                         String name = parts[0].trim();
                         String value = parts[1].trim();
-
-                        if (isValidCookieValue(value)) {
+                        if (isValidCookieValue(value)) { 
                             newCookies.add(name + "=" + value);
                         } else {
-                            LOGGER.warning("Removed potentially malicious cookie from " + clientIP + ": " + cookie); 
+                            LOGGER.warning(String.format("Removed potentially malicious cookie from %s: %s",
+                                    clientIP, cookie));
                         }
                     }
                 }
             }
         }
         if (!newCookies.isEmpty()) {
-            String newCookieHeader = "Cookie: " + String.join("; ", newCookies) + "\r\n";
-            request = request.replaceAll("(?i)cookie: .*?\r\n", newCookieHeader); 
+            String newCookieHeader = "Cookie: " + String.join("; ", newCookies) + "\r\n"; 
+            request = request.replaceAll("(?i)cookie: .*?\r\n", newCookieHeader);
+        }
+        return request; 
+    }
+
+    private boolean isValidCookieValue(String cookieValue) {
+        // Basic validation - you might need more specific rules 
+        return cookieValue.matches("^[a-zA-Z0-9-_=%.; ]+$");
+    }
+
+    private String filterBlockedContent(String request) {
+        for (String blocked : blockedContent) {
+            if (request.contains(blocked)) {
+                LOGGER.warning(String.format("Blocked content detected: %s", blocked));
+                return "Request Blocked"; 
+            }
         }
         return request;
     }
 
-    private boolean isValidCookieValue(String cookieValue) {
-        return cookieValue.matches("^[a-zA-Z0-9-_. ]+$"); 
+    private boolean isValidLinkName(String name) {
+        return name.matches("^[a-zA-Z0-9-]+$"); 
+    }
+
+    private boolean isValidTargetAddress(String address) {
+        // Validate IP:PORT format
+        return address.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}:\\d+$");
     }
 }
 
 class Link {
-    private String targetAddress;
-    private int assignedPort;
+    private final String targetAddress; 
+    private final int assignedPort;
     private boolean active;
-    private String mode;
+    private String mode; 
 
     public Link(String targetAddress, int assignedPort, String mode) {
         this.targetAddress = targetAddress;
-        this.assignedPort = assignedPort;
+        this.assignedPort = assignedPort; 
         this.active = false;
         this.mode = mode;
     }
 
     public String getTargetAddress() {
-        return targetAddress;
+        return targetAddress; 
     }
 
     public int getAssignedPort() {
@@ -817,7 +962,7 @@ class Link {
     }
 
     public boolean isActive() {
-        return active;
+        return active; 
     }
 
     public void setActive(boolean active) {
@@ -829,20 +974,20 @@ class Link {
     }
 
     public void setMode(String mode) {
-        this.mode = mode;
+        this.mode = mode; 
     }
 
     public static Map<String, Link> fromJsonMap(String json) {
-        Map<String, Link> map = new HashMap<>();
-        json = json.replace("{", "").replace("}", "").replace("\"", "");
-        String[] entries = json.split(",");
+        Map<String, Link> map = new HashMap<>(); 
+        json = json.replace("{", "").replace("}", "").replace("\"", ""); 
+        String[] entries = json.split(","); 
         for (String entry : entries) {
-            String[] parts = entry.split(":");
-            if (parts.length == 4) { 
-                String name = parts[0];
-                String targetAddress = parts[1];
-                int assignedPort = Integer.parseInt(parts[2]);
-                String mode = parts[3];
+            String[] parts = entry.split(":"); 
+            if (parts.length == 4) {
+                String name = parts[0].trim();
+                String targetAddress = parts[1].trim(); 
+                int assignedPort = Integer.parseInt(parts[2].trim());
+                String mode = parts[3].trim(); 
                 map.put(name, new Link(targetAddress, assignedPort, mode));
             }
         }
@@ -851,76 +996,82 @@ class Link {
 
     public static String toJsonMap(Map<String, Link> map) {
         StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        int i = 0;
+        sb.append("{"); 
+        int i = 0; 
         for (Map.Entry<String, Link> entry : map.entrySet()) {
-            sb.append("\"").append(entry.getKey()).append("\":{\"targetAddress\":\"")
-                    .append(entry.getValue().getTargetAddress()).append("\",\"assignedPort\":")
-                    .append(entry.getValue().getAssignedPort()).append(",\"mode\":\"")
-                    .append(entry.getValue().getMode()).append("\"}");
-            if (i < map.size() - 1) {
+            sb.append(String.format("\"%s\":{\"targetAddress\":\"%s\"," + 
+                            "\"assignedPort\":%d,\"mode\":\"%s\"}",
+                    entry.getKey(), entry.getValue().getTargetAddress(), 
+                    entry.getValue().getAssignedPort(), entry.getValue().getMode()));
+            if (i < map.size() - 1) { 
                 sb.append(",");
             }
-            i++;
+            i++; 
         }
-        sb.append("}");
+        sb.append("}"); 
         return sb.toString();
-    }
-}
-class IpReputation {
-    public Queue<Long> requests = new LinkedList<>();
-    public int score = 100; 
-
-    public void updateScore(int points) {
-        this.score += points;
-        if (this.score < 0) {
-            this.score = 0;
-        } else if (this.score > 100) {
-            this.score = 100;
-        }
     }
 }
 
 class CommandHandler {
-    private static final Logger LOGGER = Logger.getLogger(CommandHandler.class.getName());
-    private LinkManager linkManager;
+    private final LinkManager linkManager;
 
     public CommandHandler(LinkManager linkManager) {
         this.linkManager = linkManager;
     }
 
     public String handleCommand(String input) {
-        String[] parts = input.split(" ");
-        String command = parts[0];
-
-        switch (command) {
-            case "linkadd":
-                if (parts.length == 5
-                        && (parts[4].equals("forward") || parts[4].equals("ddosprot") || parts[4].equals("filterddosprot"))) {
-                    return linkManager.addLink(parts[1], parts[2], parts[4]);
-                } else {
-                    return "Usage: linkadd <name> <targetAddress:port> <mode(forward/ddosprot/filterddosprot)>";
-                }
-            case "linkremove":
-                if (parts.length == 2) {
-                    return linkManager.removeLink(parts[1]);
-                } else {
-                    return "Usage: linkremove <name>";
-                }
-            case "linkstart":
-                if (parts.length == 2) {
-                    return linkManager.startLink(parts[1]);
-                } else {
-                    return "Usage: linkstart <name>";
-                }
-            case "linkstop":
-                if (parts.length == 2) {
-                    return linkManager.stopLink(parts[1]);
-                } else {
-                    return "Usage: linkstop <name>";
-                }
-            default:
-                return "Unknown command. Available commands: linkadd, linkremove, linkstart, linkstop";
+        String[] parts = input.split(" "); 
+        if (parts.length == 0) {
+            return "Invalid command.";
         }
+        String command = parts[0].toLowerCase();
+
+        return switch (command) { 
+            case "linkadd" -> {
+                if (parts.length == 5 && 
+                    (parts[4].equals("forward") || 
+                     parts[4].equals("ddosprot") || 
+                     parts[4].equals("filterddosprot"))) {
+                    yield linkManager.addLink(parts[1], parts[2], parts[4]); 
+                } else {
+                    yield "Usage: linkadd <name> <targetAddress:port> <mode(forward/ddosprot/filterddosprot)>"; 
+                }
+            }
+            case "linkremove" -> {
+                if (parts.length == 2) {
+                    yield linkManager.removeLink(parts[1]); 
+                } else {
+                    yield "Usage: linkremove <name>";
+                }
+            }
+            case "linkstart" -> {
+                if (parts.length == 2) { 
+                    yield linkManager.startLink(parts[1]); 
+                } else {
+                    yield "Usage: linkstart <name>"; 
+                }
+            }
+            case "linkstop" -> {
+                if (parts.length == 2) { 
+                    yield linkManager.stopLink(parts[1]);
+                } else {
+                    yield "Usage: linkstop <name>";
+                }
+            }
+            case "blockcontent" -> {
+                if (parts.length > 1) {
+                    String contentToBlock = String.join(" ", Arrays.copyOfRange(parts, 1, parts.length));
+                    linkManager.blockContent(contentToBlock);
+                    yield String.format("Content blocked: %s", contentToBlock);
+                } else {
+                    yield "Usage: blockcontent <content_to_block>"; 
+                }
+            }
+            default -> """
+                       Unknown command. Available commands:
+                       - linkadd, linkremove, linkstart, linkstop
+                       - blockcontent"""; 
+        }; 
     }
 }
