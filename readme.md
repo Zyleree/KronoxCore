@@ -1,138 +1,75 @@
 # KronoxCore
 
-This is a customizable Java proxy server that features:
+KronoxCore is a customizable Java-based proxy server designed for flexibility, security, and performance. It features different proxying modes, robust DDoS protection, CORS support, and the ability to create a server fleet using MongoDB for shared configuration and potential load balancing (future implementation).
 
-- **Simple Forwarding (`forward` mode)**
-- **Basic and Enhanced DDoS Protection:** (`ddosprot` and `filterddosprot` modes)
-- **CORS Support:** Allows cross-origin requests based on configurable allowed origins.
+## Key Features:
 
-## Features:
+**1. Proxying Modes:**
 
-**Proxying Modes:**
+-   **`forward`:** Directly forwards requests to the target server without any additional processing.
+-   **`ddosprot`:**  Implements basic DDoS protection with rate limiting and temporary IP banning.
+-   **`filterddosprot`:**  Adds advanced security by filtering (removing/sanitizing headers and cookies), encrypting the request, and then forwarding it to the target. Responses are decrypted before being sent back to the client.
 
-- **`forward`:** Forwards requests directly to the target server without DDoS protection.
-- **`ddosprot`:** Provides basic DDoS protection using rate limiting and temporary IP banning.
-- **`filterddosprot`:** Adds an extra layer of security by sanitizing and encrypting requests before forwarding them.
+**2. DDoS Protection:**
 
-**DDoS Protection:**
+-   **Rate Limiting:** Limits the number of requests from a single IP within a defined time window.
+-   **Path-Based Rate Limiting:** Allows for setting different rate limits per unique URL path.
+-   **Temporary IP Banning:** Automatically bans IPs exceeding the rate limits for a configurable duration.
 
-- **Rate Limiting:** The server limits the number of requests a client can make within a one-second window to prevent potential attacks. If exceeded, the IP is temporarily banned. 
-- **Temporary IP Banning:**  IPs identified as exceeding the request rate limit are automatically banned for a short duration to mitigate DDoS attempts.
-- **Path-Based Rate Limiting:**  The `ddosprot` mode now supports separate rate limits for each unique URL path, allowing for more granular control over allowed requests.
+**3. Filtering and Sanitization:**
 
-**Sanitization:**
+-   **Malicious Header Removal:**  Removes known dangerous headers from incoming requests (e.g., `Referer`, `X-Forwarded-For`).
+-   **Cookie Sanitization:**  Filters cookies to remove potentially malicious characters and adds `HttpOnly` and `Secure` flags as configured.
 
-- **Malicious Header Removal:** In `filterddosprot` mode, potentially dangerous headers are removed from client requests to reduce vulnerabilities. These headers can include:
-    - `Cookie` (Handled separately)
-    - `Referer`
-    - `User-Agent` 
-    - `X-Forwarded-For`
-    - `X-Forwarded-Host`
-- **Cookie Sanitization:**
-    - The `filterddosprot` mode also sanitizes cookies, rejecting any cookie that contains characters outside of alphanumeric, hyphen, underscore, period, "=", "%", ".", ";", and " " (space).
-    - **HTTPOnly and Secure Flags:** You can now configure `HttpOnly` and `Secure` flags for cookies in the `config.properties` file to enhance cookie security. 
+**4. Encryption:**
 
-**Encryption:**
+-   **AES Encryption (CBC mode, PKCS5Padding):**  Used in  `filterddosprot`  mode for encrypting the entire request payload. 
+-   **Secure Key Management:**  The encryption key is stored in  `config.properties`  and generated automatically if not present.
 
-- **`filterddosprot` Mode Encryption:**  This mode encrypts requests before sending them to the target server using AES encryption. It also decrypts the response before forwarding it back to the client.
-- **Secure Key Management:**  The encryption key is now managed in `config/config.properties`. If no key is present in the file, the server will generate a random key at startup and store it. 
-    - **Important:** Never hardcode encryption keys directly into your source code, especially when committing to version control!
+**5. Content Filtering:**
 
-**Content Filtering:**
+-   **`blocked_content.json`:** A list of URLs, keywords, or patterns that will trigger request blocking. 
 
-- **`blocked_content.json`:** This file in the `config` directory allows you to list content (URLs, keywords, etc.) to be blocked. The server will reject requests that contain this content.
+**6. CORS Support:**
 
-**CORS Support:**
+-   **Configurable `corsAllowedOrigins`:** Defines allowed origins for cross-origin requests, including the wildcard (%) to allow all origins.
 
-- **`corsAllowedOrigins` Configuration:** You can configure a list of allowed origins for CORS in the `config/config.properties` file. 
-- **`%` Wildcard:** The `%` wildcard in `corsAllowedOrigins` allows all origins, which is useful for development or open APIs, but consider stricter restrictions for production environments.
+**7. Fleet Mode and MongoDB Integration**
 
-**Other Improvements:**
+-   **Fleet Management:** KronoxCore servers can be grouped into a fleet, managed by a central MongoDB database.
+    -   **Instance Registration:** Each server registers itself in the database with a unique ID, API key, and IP address/port. 
+    -   **Network Information:** The `networkinfo` command displays reachable instances in the fleet.
+-   **Shared Blocked Content (Future Implementation):**  The  `blocked_content`  collection in MongoDB will be used to manage a common set of blocked content for the entire fleet. 
 
-- **Non-blocking I/O (NIO):** The proxy server now uses NIO for better performance and scalability.
-- **Thread Pooling:**  A thread pool is used to handle client connections more efficiently.
-- **Buffering:** Data is buffered for improved network I/O performance.
-- **Detailed Logging:**  Detailed access logs are generated, including timestamps, client IP addresses, request methods, URLs, target addresses, and response codes.
-- **Dynamic Configuration Reloading:** You can reload the `config.properties` file using the `refreshconfig` command without restarting the server.
+**8.  Configuration Management**
 
-## Getting Started:
+-   **`config.properties`:**  Central configuration file for settings like:
+    -   `availablePorts`: A comma-separated list of available ports for proxying.
+    -   `ddosProtectionEnabled`: Boolean to enable/disable DDoS protection.
+    -   `ddosTimeoutMinutes`: Duration for temporary IP bans.
+    -   `corsAllowedOrigins`: Comma-separated list of allowed CORS origins.
+    -   `encryptionKey`: The encryption key used for `filterddosprot` mode.
+    -   `httpOnly`: Boolean to enable/disable the  `HttpOnly`  flag for cookies.
+    -   `secureCookie`: Boolean to enable/disable the  `Secure`  flag for cookies.
+    -   `defaultCsrfProtection`:  Boolean to enable/disable CSRF protection by default.
+    -   `kronoxPort`: The port used for server-to-server communication (fleet mode).
+    -   `mongoDbUrl`: Connection URL for the MongoDB database.
+    -   `fleetMode`:  Boolean to enable/disable fleet mode.
+    -   `instanceName`:  Name of the current server instance.
+    -   `instanceId`: Unique ID generated for each instance. 
+    -   `apiKey`: API key generated for secure communication (fleet mode).
+-   **Dynamic Reloading (`refreshconfig` Command):**  The configuration can be reloaded on-the-fly without restarting the server.
 
-1. **Compile and Run:** 
-   - Navigate to your project directory in your terminal.
-   - Compile the code:  `javac src/main/java/Main.java`
-   - Run the server:  `java -cp src/main/java Main` 
+**9. Non-Blocking I/O and Thread Pooling:**
 
-    The `config` and `logs` directory will be created automatically in your project root if it does not already exist
+-   **NIO (Non-Blocking I/O):** Uses the `java.nio` package for handling multiple connections efficiently.
+-   **Thread Pool (`ExecutorService`):**  Manages threads for handling client connections, ensuring better resource utilization.
 
-2. **Configure the server:**
-   - Open `config/config.properties` and adjust the settings. A default config file will be generated with these default settings: 
-     ```properties
-     availablePorts=8000,8001,8002,8003,8004
-     ddosProtectionEnabled=false
-     ddosTimeoutMinutes=30
-     corsAllowedOrigins=%
-     encryptionKey=
-     httpOnly=false
-     secureCookie=false
-     defaultCsrfProtection=false
-     ```
-    - **Important:** 
-        - **Replace the empty `encryptionKey` value with a strong, randomly generated encryption key. Do not use this placeholder key in a real environment!**
-        - Change the `corsAllowedOrigins` value to the origins you want to allow, or use `%` for all origins (for development only).
-    -  Add content you want to block in `config/blocked_content.json`, one entry per line. 
+**10.  Detailed Access Logs:** 
 
-3. **Configure Links:**
-    - You can define links in `config/links.properties` using this format:
-        ```properties
-        link.<linkName>=<targetAddress>,<assignedPort>,<mode>,<active>,<csrfProtection>,<csrfToken>
-        ```
-        - For example:
-        ```properties
-        link.myapi=api.example.com:443,8000,filterddosprot,true,true,your-csrf-token
-        ```
+-   Logs each request with timestamps, client IP, requested URL, target address, and other relevant data.
 
-## Usage - Server Commands:
+**Important Notes:**
 
-The server uses interactive commands:
-
-- **`linkadd <name> <targetAddress:port> <mode>`**:
-    - Adds a new proxy link. 
-    - `<name>`: Unique name for the link.
-    - `<targetAddress:port>`: Address and port of the target server (e.g., `example.com:80`).
-    - `<mode>`:  `forward`, `ddosprot`, or `filterddosprot`.
-- **`linkremove <name>`**: Removes a proxy link.
-- **`linkstart <name>`**:  Starts a proxy link. The proxy starts listening on the assigned port.
-- **`linkstop <name>`**:  Stops a proxy link.
-- **`blockcontent <content>`**: Adds content to be blocked by the proxy. 
-- **`refreshconfig`**: Reloads the `config.properties` file. 
-- **`help`**: Shows the list of available commands.
-- **`exit`**:  Shuts down the server. 
-
-## Example:
-
-1.  **Add a secure link with filtering and encryption:**
-    ```bash
-    linkadd myapi api.example.com:443 filterddosprot
-    ```
-
-2.  **Start the link:**
-    ```bash
-    linkstart myapi
-    ```
-
-Now, requests sent to `localhost:8000` (or whichever port is assigned) will be:
-
-- Sanitized
-- Encrypted
-- Forwarded to `https://api.example.com:443`
-
-The response will be:
-
-- Decrypted
-- Forwarded back to the client
-
-## Disclaimer:
-
-While this proxy server incorporates basic security measures, you should adapt and extend the provided code to meet your specific requirements, especially regarding DDoS mitigation, encryption key management, and advanced request sanitization for production use. 
-
-**This project is a foundation, not a finished solution.** Conduct thorough testing and consult security best practices for your environment before deploying this server in a production scenario! 
+-   KronoxCore assumes MongoDB is installed and accessible (local or remote). 
+-   Secure your encryption key (`encryptionKey` in  `config.properties`) carefully. **Do not commit your key to version control!**
