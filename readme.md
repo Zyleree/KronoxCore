@@ -1,6 +1,6 @@
 # KronoxCore
 
-KronoxCore is a customizable Java-based proxy server designed for flexibility, security, and performance. It features different proxying modes, robust DDoS protection, CORS support, and the ability to create a server fleet using MongoDB for shared configuration and potential load balancing (future implementation).
+KronoxCore is a customizable Java-based proxy server designed for flexibility, security, and performance. It features different proxying modes, robust DDoS protection, CORS support, and the ability to create a server fleet using MariaDB for shared configuration and potential load balancing (future implementation).
 
 ## Key Features:
 
@@ -34,14 +34,14 @@ KronoxCore is a customizable Java-based proxy server designed for flexibility, s
 
 -   **Configurable `corsAllowedOrigins`:** Defines allowed origins for cross-origin requests, including the wildcard (%) to allow all origins.
 
-**7. Fleet Mode and MongoDB Integration**
+**7. Fleet Mode and MariaDB Integration**
 
--   **Fleet Management:** KronoxCore servers can be grouped into a fleet, managed by a central MongoDB database.
+-   **Fleet Management:** KronoxCore servers can be grouped into a fleet, managed by a central MariaDB database.
     -   **Instance Registration:** Each server registers itself in the database with a unique ID, API key, and IP address/port. 
     -   **Network Information:** The `networkinfo` command displays reachable instances in the fleet.
--   **Shared Blocked Content (Future Implementation):**  The  `blocked_content`  collection in MongoDB will be used to manage a common set of blocked content for the entire fleet. 
+-   **Shared Blocked Content (Future Implementation):** The `blocked_content` table in MariaDB (to be implemented) will be used to manage a common set of blocked content for the entire fleet. 
 
-**8.  Configuration Management**
+**8. Configuration Management**
 
 -   **`config.properties`:**  Central configuration file for settings like:
     -   `availablePorts`: A comma-separated list of available ports for proxying.
@@ -53,7 +53,9 @@ KronoxCore is a customizable Java-based proxy server designed for flexibility, s
     -   `secureCookie`: Boolean to enable/disable the  `Secure`  flag for cookies.
     -   `defaultCsrfProtection`:  Boolean to enable/disable CSRF protection by default.
     -   `kronoxPort`: The port used for server-to-server communication (fleet mode).
-    -   `mongoDbUrl`: Connection URL for the MongoDB database.
+    -   `mariaDbUrl`: Connection URL for the MariaDB database.
+    -   `mariaDbUser`: Username for the MariaDB database.
+    -   `mariaDbPassword`: Password for the MariaDB database.
     -   `fleetMode`:  Boolean to enable/disable fleet mode.
     -   `instanceName`:  Name of the current server instance.
     -   `instanceId`: Unique ID generated for each instance. 
@@ -65,11 +67,12 @@ KronoxCore is a customizable Java-based proxy server designed for flexibility, s
 -   **NIO (Non-Blocking I/O):** Uses the `java.nio` package for handling multiple connections efficiently.
 -   **Thread Pool (`ExecutorService`):**  Manages threads for handling client connections, ensuring better resource utilization.
 
-**10.  Detailed Access Logs:** 
+**10. Detailed Access Logs:** 
 
 -   Logs each request with timestamps, client IP, requested URL, target address, and other relevant data.
 
 **Important Notes:**
 
--   KronoxCore assumes MongoDB is installed and accessible (local or remote). 
+-   KronoxCore assumes MariaDB is installed and accessible (local or remote). 
 -   Secure your encryption key (`encryptionKey` in  `config.properties`) carefully. **Do not commit your key to version control!**
+-   Make sure to create the `kronoxcore` database in MariaDB and configure the appropriate user credentials in `config.properties`.
