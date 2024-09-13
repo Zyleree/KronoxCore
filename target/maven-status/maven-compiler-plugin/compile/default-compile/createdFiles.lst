@@ -1,6 +1,7 @@
 com\zyleree\kronoxcore\Main$Link.class
 com\zyleree\kronoxcore\Main.class
 com\zyleree\kronoxcore\Main$ClientData.class
+com\zyleree\kronoxcore\Main$LinkManager$1.class
 com\zyleree\kronoxcore\Main$ConfigManager.class
 com\zyleree\kronoxcore\Main$LinkManager.class
 com\zyleree\kronoxcore\Main$NetworkManager.class
