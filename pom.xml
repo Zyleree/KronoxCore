@@ -27,8 +27,6 @@
             <version>5.0.0</version>
             <scope>provided</scope>
         </dependency>
-
-        <!-- Jetty Dependencies for HTTP/2 (Java 11+) -->
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-server</artifactId>
@@ -68,6 +66,16 @@
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-util</artifactId>
             <version>${jetty.version}</version>
+        </dependency>
+        <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+        <version>31.1-jre</version>
+        </dependency>
+        <dependency>
+        <groupId>org.owasp.esapi</groupId>
+        <artifactId>esapi</artifactId>
+        <version>2.5.0.0</version> 
         </dependency>
     </dependencies>
 
